@@ -1,0 +1,111 @@
+
+To retrieve the History Data
+<SPIR[A2][A1][A0][L1][L0]>>
+
+[L1][L0] number of binary bytes
+A2,A1,A0 form 24 bit address.
+L1,L0 form 16  bit data length
+GMC-300 Rev 2.10 or later
+
+The user requests the data given the starting address and length of data 
+requested from the GQ GMC's 64k byte buffer. The data logging can be set 
+to record either CPM or CPS and the data can be recorded either every 
+second, minute, or hour. The length parameter is the number of bytes to 
+be read, but note that the history data itself is intermixed with special 
+tag data indicating either (1) date/timestamp, (2) double byte data 
+sample, or (3) ASCII tag. So the number of bytes read is not the number 
+of data samples. You don't know the number of data samples until you have 
+parsed the history data returned.
+
+The date/timestamp embedded into the history buffer is a string of the form
+  [55][AA][00][YY][M1][D1][HH][M2][SS][55][AA][D2]
+  55AA is start of sequence marker, (decimal 85 and 170)
+  00 is the enumeration code that the date/timestamp follows,
+  YY is year, M1 is month, D1 is day
+  HH is 24 hour time, M2 is minutes, SS is seconds,
+  55AA is end of sequence marker,
+  D2 is indicator of saved data type where
+    0 = off (history is off),
+    1 = CPS every second,
+    2 = CPM every minute,
+    3 = CPM recorded once per hour.
+
+The double byte data sample string is 
+  [55][AA][01][DH][DL] where
+  55AA is start of sequence marker,
+  01 is the enumeration code that two byte data follows,
+  DH is the MSB, DL is the LSB.
+  There is no 55AA end of sequence marker.
+
+  This particular special tag represents a data sample whose value exceeded 
+  255 and thus needed two bytes. A history buffer of two byte data samples 
+  would look something like 55AA02a355AA027555AA01b8 etc. If the radiation 
+  is continuously high, then all data will be > 255 and the number of data 
+  samples in the history buffer will greatly diminish (decreased by factor 
+  of 2).
+
+The ASCII label string is 
+  [55][AA][02][LL][CC][CC][CC][CC].... where
+  55AA is start of sequence marker,
+  02 is the enum code indicating that the tag ASCII string follows,
+  LL is the number of ASCII characters in the label,
+  CC is an ASCII character, there being LL number of ASCII characters.
+  There is no 55AA end of sequence marker.
+
+The history data itself is recorded as either CPS or CPM. If CPS, the 
+data byte is typically a sequence of 00, 01's, 02's, and occasionally 
+a 03. If CPM, the data is typically anywhere from 0x0a (10 decimal) up
+to 0x1e (30 decimal). But remember that any time the count per time 
+exceeds 255, then the special [55][AA][DH][DL] sequence kicks in.
+
+The history data continues until either one or both of the date/timestamp 
+or label tag special sequences are inserted into the history buffer.
+
+If the user requests an area of the history buffer which has no data as 
+yet recorded, then the start of the history buffer is used, in other 
+words, it is as if the user requested address zero.
+
+If the user requests a small area of the history buffer, then chances are 
+high that the data retrieved will have no date/timestamp embedded.  It is 
+then impossible to know when the data was recorded. 
+
+The 64K history buffer is divided into 4K blocks and it is guaranteed that 
+there will be a date/timestamp somewhere within each 4K block. For these 
+reasons, the user should request no less than 4K bytes on 4K byte boundary. 
+
+Note that 4K bytes is also the maximum request allowed. So for all 
+practical purposes, all get history commands should be 4K bytes. It would 
+be wise to collect all 64K of the history buffer for parsing.
+
+The following is a typical history buffer log of counts per second (leading 
+0 is suppressed). Note that the date/timestamp is embedded about half way 
+through. 
+
+The timestamp of the data preceding the date/timestamp is unknown until a 
+further search backward in the history buffer discovers the previous 
+date/timestamp.
+
+1 0 1 1 0 0 0 1 0 1 0 0 0 0 2 0 0 0 0 0 0 2 0 0 0 2 0 0 0 0 0 0
+0 1 0 0 0 0 0 0 1 0 0 2 0 0 1 0 1 0 2 0 0 0 1 2 1 0 0 0 1 0 1 1
+1 1 0 0 0 0 0 0 1 1 0 1 0 0 0 1 0 4 1 0 0 0 0 1 0 0 2 2 0 2 0 0
+0 2 1 1 0 0 1 1 0 0 1 1 2 0 0 3 2 0 1 0 0 0 2 0 0 2 0 0 0 0 0 0
+0 0 1 2 0 0 0 55 aa 0 c 4 1 11 1f a 55 aa 1 1 0 0 0 0 0 0 1 0 0 0 1 1
+0 1 0 0 0 0 0 0 0 0 0 0 0 1 0 1 1 1 1 1 0 0 0 1 0 1 0 0 0 0 0 1
+1 0 0 0 0 0 0 0 1 0 0 1 0 2 1 0 1 2 1 1 0 1 1 0 0 0 0 0 0 0 0 0
+0 0 1 0 0 0 0 0 0 2 0 0 0 0 0 1 1 3 0 0 2 0 0 0 0 0 0 1 1 0 1 0
+
+The following is a typical history buffer log of counts per minute (leading 
+0 is suppressed) changed over to counts per minute. Note that there are two 
+date/timestamps(2012/April 2/17:15). 
+
+The first indicates the current logging is set to counts per second, but the 
+second changes that to counts per minute. Also notice, there is a single two 
+byte sample (55AA021b). The 0xff data indicates an area of the history buffer 
+that has no data recorded.
+
+0 0 0 0 0 0 1 0 0 0 1 1 0 0 0 0
+1 3 0 0 0 0 0 1 1 0 0 2 0 0 0 0
+0 0 55 aa 0 c 4 2 11 e 34 55 aa 1 55 aa
+0 c 4 2 11 e 35 55 aa 2 1b 16 12 18 18 16
+14 13 18 13 18 24 a6 ff ff ff ff ff ff ff ff ff
+ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff
